@@ -55,7 +55,7 @@ class Client extends BaseController {
             return;
         }
 
-        if (class_exists('\\Comgate\\Client') && !defined('LHWOO_COMGATE_SDK_STUB')) {
+        if ($this->has_official_comgate_sdk()) {
             return;
         }
 
@@ -66,5 +66,49 @@ class Client extends BaseController {
         }
 
         echo '<div class="notice notice-warning"><p>' . esc_html($message) . '</p></div>';
+    }
+
+    /**
+     * Determines whether the official Comgate SDK dependency is available.
+     *
+     * @return bool
+     */
+    protected function has_official_comgate_sdk() {
+        if (class_exists('\\Comgate\\Client') && !defined('LHWOO_COMGATE_SDK_STUB')) {
+            return true;
+        }
+
+        if (class_exists('\\Composer\\InstalledVersions')) {
+            try {
+                if (\Composer\InstalledVersions::isInstalled('comgate/sdk')) {
+                    return true;
+                }
+            } catch (\OutOfBoundsException $exception) {
+                // Ignore the exception and continue with filesystem checks.
+            }
+        }
+
+        $basePath = $this->plugin_path;
+        if (function_exists('trailingslashit')) {
+            $basePath = trailingslashit($basePath);
+        } else {
+            $basePath = rtrim((string) $basePath, '/\\') . '/';
+        }
+
+        $vendorDir = $basePath . 'vendor/';
+
+        if (is_dir($vendorDir . 'comgate/sdk')) {
+            return true;
+        }
+
+        $installedJson = $vendorDir . 'composer/installed.json';
+        if (is_readable($installedJson)) {
+            $contents = file_get_contents($installedJson);
+            if (false !== $contents && false !== strpos($contents, '"comgate/sdk"')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
