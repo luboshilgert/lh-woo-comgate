@@ -1,0 +1,19 @@
+{
+    "name": "hilgertl/lh-woo-comgate",
+    "description": "LH Woo Comgate",
+    "type": "project",
+    "license": "GPL",
+    "authors": [
+        {
+            "name": "Lubos Hilgert",
+            "email": "lubos@hilgert.cz"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {},
+    "autoload":{
+        "psr-4":{"LHWooComgate\\" : "./src"},
+        "classmap": ["src/"]
+    }
+}
+
