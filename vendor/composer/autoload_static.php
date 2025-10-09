@@ -22,16 +22,6 @@ class ComposerStaticInitb9307ec63493356909b0aea2d38deb62
 
     public static $classMap = array (
         'Composer\\InstalledVersions' => __DIR__ . '/..' . '/composer/InstalledVersions.php',
-        'LHWooComgate\\Base\\Activate' => __DIR__ . '/../..' . '/src/base/Activate.php',
-        'LHWooComgate\\Base\\BaseController' => __DIR__ . '/../..' . '/src/base/BaseController.php',
-        'LHWooComgate\\Base\\Database' => __DIR__ . '/../..' . '/src/base/Database.php',
-        'LHWooComgate\\Base\\Deactivate' => __DIR__ . '/../..' . '/src/base/Deactivate.php',
-        'LHWooComgate\\Base\\Enqueue' => __DIR__ . '/../..' . '/src/base/Enqueue.php',
-        'LHWooComgate\\Base\\SettingsLink' => __DIR__ . '/../..' . '/src/base/SettingsLink.php',
-        'LHWooComgate\\Init' => __DIR__ . '/../..' . '/src/Init.php',
-        'LHWooComgate\\Pages\\Admin' => __DIR__ . '/../..' . '/src/pages/Admin.php',
-        'LHWooComgate\\Pages\\Client' => __DIR__ . '/../..' . '/src/pages/Client.php',
-        'LHWooComgate\\Utils\\Utils' => __DIR__ . '/../..' . '/src/utils/Utils.php',
     );
 
     public static function getInitializer(ClassLoader $loader)
