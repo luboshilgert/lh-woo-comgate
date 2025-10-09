@@ -10,10 +10,20 @@
         }
     ],
     "minimum-stability": "stable",
-    "require": {},
-    "autoload":{
-        "psr-4":{"LHWooComgate\\" : "./src"},
-        "classmap": ["src/"]
+    "prefer-stable": true,
+    "repositories": {
+        "comgate-sdk": {
+            "type": "vcs",
+            "url": "https://github.com/comgate-payments/sdk-php"
+        }
+    },
+    "require": {
+        "comgate/sdk-php": "dev-main"
+    },
+    "autoload": {
+        "psr-4": {
+            "LHWooComgate\\": "./src"
+        }
     }
 }
 
