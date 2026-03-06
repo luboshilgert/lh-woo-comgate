@@ -12,6 +12,7 @@ use Comgate\SDK\Entity\Money;
 use Comgate\SDK\Entity\Payment;
 use Comgate\SDK\Entity\PaymentNotification;
 use Comgate\SDK\Entity\Response\PaymentCreateResponse;
+use Comgate\SDK\Entity\Response\PaymentStatusResponse;
 use Comgate\SDK\Exception\ApiException;
 use WC_Order;
 
@@ -154,7 +155,7 @@ class ComgateGatewayPayment {
         }
 
         try {
-            $status = $this->get_payment_status($transId);
+            $paymentStatus = $this->get_payment_status($transId);
         } catch (ApiException $exception) {
             $code = $exception->getCode();
             $httpStatus = (is_int($code) && $code >= 500 && $code < 600) ? 502 : 400;
@@ -163,8 +164,25 @@ class ComgateGatewayPayment {
             exit;
         }
 
+        $status = $paymentStatus->getStatus();
+
         $order = $this->find_order_by_transaction($transId);
         if (!$order) {
+            $refId = $paymentStatus->getRefId();
+            $order = $this->find_order_by_reference($refId);
+
+            if ($order) {
+                error_log(sprintf(
+                    '[lh-woo-comgate] handle_notify: ignoring stale transaction transId=%s for order_id=%d resolved via refId=%s',
+                    $transId,
+                    $order->get_id(),
+                    (string) $refId
+                ));
+                status_header(200);
+                echo 'OK';
+                exit;
+            }
+
             status_header(404);
             echo 'Order not found';
             exit;
@@ -276,10 +294,27 @@ class ComgateGatewayPayment {
     }
 
     /**
+     * Resolves an order by its Comgate reference identifier.
+     *
+     * @param string|null $refId Reference ID from Comgate, mapped to WooCommerce order ID.
+     * @return WC_Order|null
+     */
+    private function find_order_by_reference($refId) {
+        $refId = $refId !== null ? trim((string) $refId) : '';
+        if ($refId === '' || !ctype_digit($refId)) {
+            return null;
+        }
+
+        $order = wc_get_order((int) $refId);
+
+        return $order instanceof WC_Order ? $order : null;
+    }
+
+    /**
      * Fetches the current status from Comgate.
      *
      * @param string $transactionId
-     * @return string
+     * @return PaymentStatusResponse
      * @throws ApiException
      */
     private function get_payment_status($transactionId) {
@@ -287,9 +322,7 @@ class ComgateGatewayPayment {
         $secret = trim((string) $this->gateway->get_option('secret'));
         $client = $this->clientFactory->create($merchantId, $secret);
 
-        $response = $client->getStatus($transactionId);
-
-        return $response->getStatus();
+        return $client->getStatus($transactionId);
     }
 
 }
