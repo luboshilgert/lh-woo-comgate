@@ -6,5 +6,10 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
+    'phpseclib3\\' => array($vendorDir . '/phpseclib/phpseclib/phpseclib'),
+    'Psr\\Log\\' => array($vendorDir . '/psr/log/src'),
+    'Psr\\Http\\Message\\' => array($vendorDir . '/psr/http-message/src'),
+    'ParagonIE\\ConstantTime\\' => array($vendorDir . '/paragonie/constant_time_encoding/src'),
     'LHWooComgate\\' => array($baseDir . '/src'),
+    'Comgate\\SDK\\' => array($vendorDir . '/comgate/sdk/src'),
 );

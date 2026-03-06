@@ -1,11 +1,11 @@
 # LH WooCommerce Comgate Gateway
 
-This plugin adds a Comgate card payment option to WooCommerce. It integrates with the official [comgate/sdk-php](https://github.com/comgate-payments/sdk-php) library and provides a lightweight fallback implementation that allows the plugin to work in development environments without external dependencies.
+This plugin adds a Comgate card payment option to WooCommerce. It integrates with the official [comgate/sdk-php](https://github.com/comgate-payments/sdk-php) library.
 
 ## Installation
 
 1. Copy the plugin folder to your WordPress installation under `wp-content/plugins/`.
-2. Run `composer install` inside the plugin directory to download the official Comgate SDK dependency. The repository registers the Comgate PHP SDK directly from GitHub (the package is not currently published on Packagist), so Composer must be able to access `https://github.com/comgate-payments/sdk-php`. GitHub enforces an hourly rate limit for unauthenticated requests; if Composer reports that the API limit is exhausted, create a temporary personal access token (no scopes required for public repositories) and supply it to Composer as described in [Composer's authentication guide](https://getcomposer.org/doc/articles/authentication-for-private-packages.md#github-oauth). When the vendor package is missing the plugin now boots a bundled lightweight fallback automatically so development can continue, but the official SDK is required for production environments.
+2. Run `composer install` inside the plugin directory to download the official Comgate SDK dependency. The repository registers the Comgate PHP SDK directly from GitHub (the package is not currently published on Packagist), so Composer must be able to access `https://github.com/comgate-payments/sdk-php`. GitHub enforces an hourly rate limit for unauthenticated requests; if Composer reports that the API limit is exhausted, create a temporary personal access token (no scopes required for public repositories) and supply it to Composer as described in [Composer's authentication guide](https://getcomposer.org/doc/articles/authentication-for-private-packages.md#github-oauth).
 3. Activate the **LH Woo Comgate** plugin in WordPress.
 4. Navigate to **WooCommerce → Settings → Payments** and enable **Comgate**.
 5. Enter your Comgate merchant ID and secret, adjust the remaining settings, and save the configuration.
