@@ -105,7 +105,7 @@ class ComgateGatewayPayment {
         }
 
         try {
-            $status = $this->get_payment_status($transId);
+            $status = $this->get_payment_status($transId)->getStatus();
         } catch (ApiException $exception) {
             error_log('[lh-woo-comgate] handle_return: status error=' . $exception->getMessage());
             wp_die(__('Unable to verify Comgate payment status.', 'lh-woo-comgate'));
