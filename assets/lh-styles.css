@@ -1,7 +1,11 @@
 /* Comgate payment gateway - frontend styles */
 
-/* Logo v labelu platební metody na pokladně */
-.lh-comgate-icon {
+/* Logo v labelu platební metody na pokladně.
+   Scopováno přes .woocommerce/.woocommerce-page (specificita 0,2,0), aby
+   přebilo WC pravidlo `.woocommerce img { height: auto }` (0,1,1) z
+   woocommerce-layout.css, které jinak zvětší SVG na přirozenou velikost. */
+.woocommerce .lh-comgate-icon,
+.woocommerce-page .lh-comgate-icon {
     display: block;
     height: 24px;
     width: auto;
