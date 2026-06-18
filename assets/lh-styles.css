@@ -1,0 +1,12 @@
+/* Comgate payment gateway - frontend styles */
+
+/* Logo v labelu platební metody na pokladně */
+.lh-comgate-icon {
+    display: block;
+    height: 24px;
+    width: auto;
+    max-width: 100%;
+    flex: 0 0 auto;
+    margin-left: auto;
+    vertical-align: middle;
+}
