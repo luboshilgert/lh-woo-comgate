@@ -115,7 +115,8 @@ class ComgateGatewayPayment {
             $order->payment_complete($transId);
             $order->add_order_note(__('Comgate confirmed the payment.', 'lh-woo-comgate'));
         } elseif ($status === PaymentStatusCode::CANCELLED) {
-            $order->update_status('cancelled', __('Comgate reported that the payment was cancelled.', 'lh-woo-comgate'));
+            // Failed, not cancelled: only a failed order can be paid again and the thank-you page flags it as unpaid.
+            $order->update_status('failed', __('Comgate reported that the payment was cancelled.', 'lh-woo-comgate'));
         } elseif ($status === PaymentStatusCode::PENDING) {
             $order->add_order_note(__('Comgate reported that the payment is pending.', 'lh-woo-comgate'));
         }
@@ -192,7 +193,8 @@ class ComgateGatewayPayment {
             $order->payment_complete($transId);
             $order->add_order_note(__('Comgate confirmed the payment.', 'lh-woo-comgate'));
         } elseif ($status === PaymentStatusCode::CANCELLED) {
-            $order->update_status('cancelled', __('Comgate reported that the payment was cancelled.', 'lh-woo-comgate'));
+            // Failed, not cancelled: only a failed order can be paid again and the thank-you page flags it as unpaid.
+            $order->update_status('failed', __('Comgate reported that the payment was cancelled.', 'lh-woo-comgate'));
         } elseif ($status === PaymentStatusCode::PENDING) {
             $order->add_order_note(__('Comgate reported that the payment is pending.', 'lh-woo-comgate'));
         }
