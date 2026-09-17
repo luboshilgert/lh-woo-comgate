@@ -14,3 +14,23 @@
     margin-left: auto;
     vertical-align: middle;
 }
+
+/* Ikony karty, Apple Pay a Google Pay v popisu brány drží v řádku i v šablonách,
+   jejichž reset dává `img { display: block }` - jinak se seřadí pod sebe. */
+.lh-comgate-icons {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+/* Šířka místo výšky, aby se ikony v úzkém boxu na mobilu zmenšily v poměru
+   stran, místo aby se zalomily. Specificita 0,2,1 kvůli `.woocommerce img`. */
+.woocommerce .lh-comgate-icons img,
+.woocommerce-page .lh-comgate-icons img {
+    display: block;
+    flex: 0 1 64px;
+    min-width: 0;
+    width: 64px;
+    height: auto;
+}

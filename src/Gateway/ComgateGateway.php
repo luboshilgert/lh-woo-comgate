@@ -40,12 +40,12 @@ class ComgateGateway extends WC_Payment_Gateway {
         $this->icon = esc_url($asset_base . 'cg-thor.svg');
         $description_icons = sprintf(
             '<span class="lh-comgate-icons">' .
-            '<img src="%s" alt="%s" style="height:32px; margin-right:6px; vertical-align:middle;" />' .
-            '<img src="%s" alt="%s" style="height:32px; margin-right:6px; vertical-align:middle;" />' .
-            '<img src="%s" alt="%s" style="height:32px; vertical-align:middle;" />' .
+            '<img src="%s" alt="%s" width="64" height="32" />' .
+            '<img src="%s" alt="%s" width="64" height="32" />' .
+            '<img src="%s" alt="%s" width="64" height="32" />' .
             '</span>',
             esc_url($asset_base . 'card.svg'),
-            esc_attr__('Card', 'lh-woo-comgate'),
+            esc_attr__('Visa, Mastercard', 'lh-woo-comgate'),
             esc_url($asset_base . 'apple-pay.svg'),
             esc_attr__('Apple Pay', 'lh-woo-comgate'),
             esc_url($asset_base . 'google-pay.svg'),
