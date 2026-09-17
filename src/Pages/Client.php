@@ -19,6 +19,49 @@ class Client extends BaseController {
         add_action('plugins_loaded', [$this, 'boot_gateway']);
         add_action('admin_notices', [$this, 'maybe_show_missing_sdk_notice']);
         add_action('wp_loaded', [$this, 'restore_payment_settings_tab'], 1);
+        add_action('init', [$this, 'remove_legacy_log']);
+        add_action('admin_notices', [$this, 'maybe_show_legacy_log_notice']);
+    }
+
+    /**
+     * Deletes comgate.log that versions before the WooCommerce logger wrote into the web-accessible plugin root.
+     *
+     * Runs on every request, not only in admin, so a shop nobody logs into is cleaned up too.
+     *
+     * @return void
+     */
+    public function remove_legacy_log() {
+        $file = $this->legacy_log_path();
+
+        if (file_exists($file)) {
+            wp_delete_file($file);
+        }
+    }
+
+    /**
+     * Warns when the legacy log survived deletion, e.g. because it belongs to another system user.
+     *
+     * @return void
+     */
+    public function maybe_show_legacy_log_notice() {
+        if (!current_user_can('manage_woocommerce') || !file_exists($this->legacy_log_path())) {
+            return;
+        }
+
+        $message = sprintf(
+            /* translators: %s: absolute path to the legacy log file */
+            __('LH Woo Comgate could not delete %s. The file is publicly downloadable and contains the Comgate API secret: delete it manually and generate a new secret in the Comgate portal.', 'lh-woo-comgate'),
+            $this->legacy_log_path()
+        );
+
+        echo '<div class="notice notice-error"><p>' . esc_html($message) . '</p></div>';
+    }
+
+    /**
+     * @return string
+     */
+    private function legacy_log_path() {
+        return $this->plugin_path . 'comgate.log';
     }
 
     /**

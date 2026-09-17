@@ -25,7 +25,8 @@ There is no build step, linter config, or test suite in this repo.
 - `ComgateGateway extends WC_Payment_Gateway` — the WooCommerce-facing entry point (id `lh_woo_comgate`). Constructs and delegates to the two helpers below; registers the option-save, return, and notify hooks.
 - `ComgateGatewayAdmin` — owns `get_form_fields()` (settings shown in WooCommerce → Settings → Payments).
 - `ComgateGatewayPayment` — all payment logic: `process_payment()`, the synchronous `handle_return()`, and the asynchronous `handle_notify()`. Builds the SDK `Payment` entity and maps Comgate status codes to WooCommerce order states.
-- `ComgateClientFactory` — builds a configured `Comgate\SDK\Client` from merchant credentials; `isAvailable()` guards against the SDK being absent. Logs SDK traffic to `comgate.log` in the plugin root via the SDK's `FileLogger`.
+- `ComgateClientFactory` — builds a configured `Comgate\SDK\Client` from merchant credentials; `isAvailable()` guards against the SDK being absent. Hands the SDK a `ComgateLogger`.
+- `ComgateLogger` - PSR-3 logger that forwards plugin and SDK records to `wc_get_logger()` (source `lh-woo-comgate`, WooCommerce → Status → Logs) and masks the API secret, which Comgate echoes back in status responses and notifications - literally by the configured value (any dump format) and by a `secret=` / `"secret":` pattern for other values. The gateway builds it and injects it into `ComgateGatewayPayment`. Debug, info and notice records are kept only with the gateway's **Debug log** setting on (default off), since they carry customer names and e-mails; warnings and errors are always logged. Its PSR-3 methods are deliberately untyped so any psr/log 1.x-3.x loaded by another plugin still satisfies the interface.
 
 **Gateway registration flow:** `Pages\Client::register()` hooks `woocommerce_payment_gateways` to append `ComgateGateway`, and shows an admin notice when the Comgate SDK is missing (`has_official_comgate_sdk()` checks class existence, `Composer\InstalledVersions`, and the `vendor/` filesystem as fallbacks). The gateway only depends on `WC_Payment_Gateway` existing at runtime.
 
@@ -37,7 +38,7 @@ There is no build step, linter config, or test suite in this repo.
 
 ## Conventions
 
-- Currency is hardcoded to CZK and the payment method to card (`PaymentMethodCode::CARD_CARD_CZ_COMGATE`) in `ComgateGatewayPayment::build_sdk_payment()`.
+- Currency is hardcoded to CZK and the preselected payment method to card (`PaymentMethodCode::CARD_CARD_CZ_COMGATE`) in `ComgateGatewayPayment::build_sdk_payment()`. The payer can still switch to any other method enabled for the merchant on the Comgate page (bank buttons, QR, deferred payments).
 - User-facing strings use the `lh-woo-comgate` text domain via `__()` / `esc_html__()` etc.
-- Diagnostics are written with `error_log()` using the `[lh-woo-comgate]` prefix, plus the SDK's own `comgate.log`.
+- Diagnostics go through `ComgateLogger`, never `error_log()` or a file in the plugin directory: the plugin root is web-accessible, and the old `comgate.log` exposed the API secret. `Pages\Client::remove_legacy_log()` deletes that file on `init` where an older version left it, and an admin notice asks for manual deletion and a new secret if it cannot.
 - `Base\Database`, `Utils\Utils`, `Pages\Admin`, and the `templates/` files are present but currently empty placeholders. Note `uninstall.php` calls `Database::deleteTables()`, which does not yet exist — implement it before relying on uninstall cleanup.

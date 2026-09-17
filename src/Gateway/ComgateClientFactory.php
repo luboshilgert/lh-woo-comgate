@@ -4,21 +4,20 @@ namespace LHWooComgate\Gateway;
 
 use Comgate\SDK\Client;
 use Comgate\SDK\Comgate;
-use Comgate\SDK\Logging\FileLogger;
+use Psr\Log\LoggerInterface;
 
 /**
  * Builds Comgate SDK clients for the current plugin setup.
  */
 class ComgateClientFactory {
-    /** @var string */
-    private $logPath;
+    /** @var LoggerInterface */
+    private $logger;
 
     /**
-     * @param string $pluginRoot
+     * @param LoggerInterface $logger
      */
-    public function __construct($pluginRoot) {
-        $root = rtrim((string) $pluginRoot, '/\\');
-        $this->logPath = $root . '/comgate.log';
+    public function __construct(LoggerInterface $logger) {
+        $this->logger = $logger;
     }
 
     /**
@@ -48,7 +47,7 @@ class ComgateClientFactory {
         $sdk = Comgate::defaults()
             ->setMerchant($merchantId)
             ->setSecret($secret)
-            ->setLogger(new FileLogger($this->logPath));
+            ->setLogger($this->logger);
 
         return $sdk->createClient();
     }

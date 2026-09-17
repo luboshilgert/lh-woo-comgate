@@ -69,6 +69,17 @@ class ComgateGatewayAdmin {
                 ],
                 'default' => 'cs',
             ],
+            'debug' => [
+                'title' => __('Debug log', 'lh-woo-comgate'),
+                'type' => 'checkbox',
+                'label' => __('Log Comgate API communication', 'lh-woo-comgate'),
+                'description' => sprintf(
+                    /* translators: %s: URL of the WooCommerce logs screen */
+                    __('Requests and responses go to the <a href="%s">WooCommerce logs</a> (source lh-woo-comgate) with the API secret masked. They include customer names, e-mails and payment details, so enable this only while debugging. Errors are logged either way.', 'lh-woo-comgate'),
+                    esc_url(admin_url('admin.php?page=wc-status&tab=logs&source=' . ComgateLogger::SOURCE))
+                ),
+                'default' => 'no',
+            ],
           /*  'prepare_only' => [
                 'title' => __('Prepare only', 'lh-woo-comgate'),
                 'type' => 'checkbox',

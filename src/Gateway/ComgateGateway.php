@@ -31,9 +31,10 @@ class ComgateGateway extends WC_Payment_Gateway {
         $this->supports = ['products'];
 
         $this->admin = new ComgateGatewayAdmin($this);
-        $this->payments = new ComgateGatewayPayment($this, $this->returnEndpoint, $this->notifyEndpoint);
-
         $this->init_form_fields();
+
+        $logger = new ComgateLogger('yes' === $this->get_option('debug'), $this->get_option('secret'));
+        $this->payments = new ComgateGatewayPayment($this, $logger);
 
         $this->title = $this->get_option('title');
         $asset_base = plugin_dir_url(dirname(__FILE__, 2)) . 'assets/img/';

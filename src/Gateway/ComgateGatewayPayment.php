@@ -26,14 +26,17 @@ class ComgateGatewayPayment {
     /** @var ComgateClientFactory */
     private $clientFactory;
 
+    /** @var ComgateLogger */
+    private $logger;
+
     /**
      * @param ComgateGateway $gateway
-     * @param string $returnEndpoint
-     * @param string $notifyEndpoint
+     * @param ComgateLogger $logger
      */
-    public function __construct(ComgateGateway $gateway) {
+    public function __construct(ComgateGateway $gateway, ComgateLogger $logger) {
         $this->gateway = $gateway;
-        $this->clientFactory = new ComgateClientFactory(dirname(__DIR__, 2));
+        $this->logger = $logger;
+        $this->clientFactory = new ComgateClientFactory($logger);
     }
 
     /**
@@ -46,7 +49,7 @@ class ComgateGatewayPayment {
         $order = wc_get_order($order_id);
 
         if (!$order instanceof WC_Order) {
-            error_log('[lh-woo-comgate] process_payment: order not found for order_id=' . $order_id);
+            $this->logger->error('process_payment: order not found for order_id=' . $order_id);
             wc_add_notice(__('Unable to load order for Comgate payment.', 'lh-woo-comgate'), 'error');
             return ['result' => 'failure'];
         }
@@ -54,7 +57,7 @@ class ComgateGatewayPayment {
         try {
             $response = $this->create_remote_payment($order);
         } catch (\Exception $exception) {
-            error_log('[lh-woo-comgate] process_payment: exception=' . $exception->getMessage());
+            $this->logger->error('process_payment: exception=' . $exception->getMessage());
             $order->update_status('failed', sprintf(__('Comgate payment failed: %s', 'lh-woo-comgate'), $exception->getMessage()));
             wc_add_notice(__('There was a problem communicating with Comgate. Please try again.', 'lh-woo-comgate'), 'error');
 
@@ -62,8 +65,8 @@ class ComgateGatewayPayment {
         }
 
         if ($response->getCode() !== RequestCode::OK || '' === $response->getRedirect()) {
-            error_log(sprintf(
-                '[lh-woo-comgate] process_payment: createPayment failed code=%s message=%s redirect=%s',
+            $this->logger->error(sprintf(
+                'process_payment: createPayment failed code=%s message=%s redirect=%s',
                 $response->getCode(),
                 $response->getMessage(),
                 $response->getRedirect() !== '' ? $response->getRedirect() : 'n/a'
@@ -101,13 +104,14 @@ class ComgateGatewayPayment {
         }
         $order = $this->find_order_by_transaction($transId);
         if (!$order) {
+            $this->logger->warning('handle_return: order not found for transId=' . $transId);
             wp_die(__('Order not found for Comgate transaction.', 'lh-woo-comgate'));
         }
 
         try {
             $status = $this->get_payment_status($transId)->getStatus();
         } catch (ApiException $exception) {
-            error_log('[lh-woo-comgate] handle_return: status error=' . $exception->getMessage());
+            $this->logger->error('handle_return: status error=' . $exception->getMessage());
             wp_die(__('Unable to verify Comgate payment status.', 'lh-woo-comgate'));
         }
 
@@ -138,11 +142,12 @@ class ComgateGatewayPayment {
         }
 
         $data = wp_unslash($_POST);
-        error_log('[lh-woo-comgate] handle_notify: payload=' . wp_json_encode($data));
+        $this->logger->debug('handle_notify: payload=' . wp_json_encode($data));
 
         try {
             $notification = PaymentNotification::createFrom($data);
         } catch (\Throwable $exception) {
+            $this->logger->warning('handle_notify: unable to parse payload: ' . $exception->getMessage());
             status_header(400);
             echo 'Unable to parse notification payload';
             exit;
@@ -150,6 +155,7 @@ class ComgateGatewayPayment {
 
         $transId = $notification->getTransactionId();
         if (!is_string($transId) || $transId === '') {
+            $this->logger->warning('handle_notify: notification without a transaction identifier');
             status_header(400);
             echo 'Notification does not include a valid transaction identifier';
             exit;
@@ -160,6 +166,7 @@ class ComgateGatewayPayment {
         } catch (ApiException $exception) {
             $code = $exception->getCode();
             $httpStatus = (is_int($code) && $code >= 500 && $code < 600) ? 502 : 400;
+            $this->logger->warning(sprintf('handle_notify: status check failed transId=%s code=%s message=%s', $transId, (string) $code, $exception->getMessage()));
             status_header($httpStatus);
             echo $exception->getMessage();
             exit;
@@ -173,8 +180,8 @@ class ComgateGatewayPayment {
             $order = $this->find_order_by_reference($refId);
 
             if ($order) {
-                error_log(sprintf(
-                    '[lh-woo-comgate] handle_notify: ignoring stale transaction transId=%s for order_id=%d resolved via refId=%s',
+                $this->logger->info(sprintf(
+                    'handle_notify: ignoring stale transaction transId=%s for order_id=%d resolved via refId=%s',
                     $transId,
                     $order->get_id(),
                     (string) $refId
@@ -184,6 +191,7 @@ class ComgateGatewayPayment {
                 exit;
             }
 
+            $this->logger->warning(sprintf('handle_notify: order not found transId=%s refId=%s', $transId, (string) $refId));
             status_header(404);
             echo 'Order not found';
             exit;
@@ -215,14 +223,14 @@ class ComgateGatewayPayment {
         $secret = trim((string) $this->gateway->get_option('secret'));
 
         if ('' === $merchantId || '' === $secret) {
-            error_log('[lh-woo-comgate] create_remote_payment: missing merchant credentials.');
+            $this->logger->error('create_remote_payment: missing merchant credentials.');
             throw new \RuntimeException(__('Merchant credentials are not configured.', 'lh-woo-comgate'));
         }
 
         $testMode = 'yes' === $this->gateway->get_option('test_mode');
 
         if (!$this->clientFactory->isAvailable()) {
-            error_log('[lh-woo-comgate] create_remote_payment: Comgate SDK class missing.');
+            $this->logger->error('create_remote_payment: Comgate SDK class missing.');
             throw new \RuntimeException(__('Comgate SDK for PHP is not installed.', 'lh-woo-comgate'));
         }
 
@@ -232,11 +240,11 @@ class ComgateGatewayPayment {
             $payment = $this->build_sdk_payment($order, $testMode);
             $response = $client->createPayment($payment);
             if ($response->getCode() !== RequestCode::OK) {
-                error_log('[lh-woo-comgate] create_remote_payment: SDK error=' . $response->getMessage());
+                $this->logger->error('create_remote_payment: SDK error=' . $response->getMessage());
                 throw new \RuntimeException('Comgate payment initiation failed: ' . $response->getMessage());
             }
         } catch (ApiException $exception) {
-            error_log('[lh-woo-comgate] create_remote_payment: SDK API exception=' . $exception->getMessage());
+            $this->logger->error('create_remote_payment: SDK API exception=' . $exception->getMessage());
             throw new \RuntimeException('Comgate payment API error: ' . $exception->getMessage(), 0, $exception);
         }
 
