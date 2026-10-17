@@ -18,7 +18,8 @@
         }
     },
     "require": {
-        "comgate/sdk": "dev-master"
+        "comgate/sdk": "dev-master",
+        "yahnis-elsts/plugin-update-checker": "^5.7"
     },
     "autoload": {
         "psr-4": {

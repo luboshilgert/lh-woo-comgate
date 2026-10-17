@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      PLUGIN_SLUG: lh-woo-comgate
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          tools: composer:v2
+
+      - name: Install dependencies
+        env:
+          # The Comgate SDK comes from a GitHub vcs repository, which hits the anonymous API rate limit.
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
+        run: composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+
+      - name: Build ZIP
+        run: |
+          # Korenova polozka ZIPu musi byt slozka pluginu, aby sla instalace
+          # primo pres WP admin.
+          mkdir -p build/"$PLUGIN_SLUG"
+          rsync -a --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'build' \
+            --exclude 'node_modules' \
+            --exclude '*.zip' \
+            --exclude '.gitignore' \
+            --exclude '.DS_Store' \
+            --exclude 'CLAUDE.md' \
+            ./ build/"$PLUGIN_SLUG"/
+          cd build && zip -rq "../$PLUGIN_SLUG.zip" "$PLUGIN_SLUG"
+
+      - name: Verify plugin version matches tag
+        run: |
+          header_version="$(grep -m1 -oP '^\s*\*\s*Version:\s*\K[0-9A-Za-z.\-]+' "$PLUGIN_SLUG.php")"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "$header_version" != "$tag_version" ]; then
+            echo "Verze v hlavicce pluginu ($header_version) nesouhlasi s tagem ($tag_version)." >&2
+            exit 1
+          fi
+          echo "Verze $header_version odpovida tagu."
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            "$PLUGIN_SLUG.zip"

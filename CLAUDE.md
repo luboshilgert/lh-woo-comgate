@@ -13,11 +13,22 @@ A WooCommerce payment gateway plugin (`LH Woo Comgate`) that adds Comgate card p
 
 There is no build step, linter config, or test suite in this repo.
 
+## Releasing
+
+The repository is public on GitHub (`origin`); sites get the plugin as plain code from the release ZIP and update through Dashboard → Updates.
+
+1. Bump `Version:` in the `lh-woo-comgate.php` header.
+2. Commit to `main` and push.
+3. Tag with a `v` prefix (e.g. `v1.1.0`) and push the tag.
+4. `.github/workflows/release.yml` runs `composer install --no-dev` (with the workflow token, because the SDK is a GitHub `vcs` repository), builds `lh-woo-comgate.zip` with the plugin folder as its root and `vendor/` inside, checks the header version against the tag and attaches the ZIP to the release.
+
+Plugin Update Checker compares the header version inside the ZIP, so tag and header must match or no update is offered. Run `composer audit` before tagging: the ZIP ships whatever `composer.lock` pins.
+
 ## Architecture
 
 **Bootstrap chain:** `lh-woo-comgate.php` (WP plugin header) loads `vendor/autoload.php` and calls `Init::register_services()`. The plugin's own classes autoload through Composer too, so without `vendor/` it registers nothing but an admin notice asking for `composer install`. There are no activation/deactivation hooks.
 
-**Service registry (`src/Init.php`):** `get_services()` returns a hardcoded list of classes; `register_services()` instantiates each and calls its `->register()` method if present. To wire up new WordPress hooks, add a class to this list - do not add `add_action`/`add_filter` calls in the bootstrap file. Registered services: `Pages\Client`, `Base\Compatibility` (declares HPOS support), `Base\Enqueue` (gateway icon styles, only where `is_checkout()` is true), `Base\SettingsLink`.
+**Service registry (`src/Init.php`):** `get_services()` returns a hardcoded list of classes; `register_services()` instantiates each and calls its `->register()` method if present. To wire up new WordPress hooks, add a class to this list - do not add `add_action`/`add_filter` calls in the bootstrap file. Registered services: `Pages\Client`, `Base\Compatibility` (declares HPOS support), `Base\Enqueue` (gateway icon styles, only where `is_checkout()` is true), `Base\SettingsLink`, `Base\Updater` (Plugin Update Checker against GitHub Releases of `luboshilgert/lh-woo-comgate`, branch `main`, release ZIP asset).
 
 **PSR-4 namespace:** `LHWooComgate\` → `./src`.
 

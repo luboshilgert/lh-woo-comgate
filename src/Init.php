@@ -17,7 +17,8 @@ final class Init {
         Pages\Client::class,
         Base\Compatibility::class,
         Base\Enqueue::class,
-        Base\SettingsLink::class
+        Base\SettingsLink::class,
+        Base\Updater::class
         ];
     }
 /**

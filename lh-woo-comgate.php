@@ -16,7 +16,7 @@
  * Plugin Name:       LH Woo Comgate
  * Plugin URI:        https://www.hilgert.cz/
  * Description:       LH Woo Comgate
- * Version:           1.0.0
+ * Version:           1.1.0
  * Author:            Lubos Hilgert
  * Author URI:        https://www.hilgert.cz/
  * License:           GPL-2.0+
