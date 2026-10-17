@@ -1,9 +1,9 @@
 <?php
 
-
 // If uninstall not called from WordPress, then exit.
-if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
-	exit;
+if (!defined('WP_UNINSTALL_PLUGIN')) {
+    exit;
 }
-$database = new \LHWooComgate\Base\Database();
-$database->deleteTables();
+
+// Order meta (_lh_woo_comgate_*) stays: it is the payment history of existing orders.
+delete_option('woocommerce_lh_woo_comgate_settings');

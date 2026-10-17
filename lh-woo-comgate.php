@@ -29,20 +29,26 @@ if (!defined('WPINC')) {
     die;
 }
 
-if (file_exists(dirname(__FILE__) . '/vendor/autoload.php')) {
-    require_once dirname(__FILE__) . '/vendor/autoload.php';
+// The plugin's own classes load through Composer too, so without vendor/ nothing else can run.
+if (!file_exists(__DIR__ . '/vendor/autoload.php')) {
+    add_action('admin_notices', 'lh_woo_comgate_missing_vendor_notice');
+    return;
 }
 
-function activate_lh_woo_comgate(){
-    \LHWooComgate\Base\Activate::activate();
-}
-register_activation_hook(__FILE__, 'activate_lh_woo_comgate');
+require_once __DIR__ . '/vendor/autoload.php';
 
-function deactivate_lh_woo_comgate(){
-    \LHWooComgate\Base\Deactivate::dectivate();
-}
-register_deactivation_hook(__FILE__, 'deactivate_lh_woo_comgate');
+\LHWooComgate\Init::register_services();
 
-if(class_exists('LHWooComgate\\Init')){
-    \LHWooComgate\Init::register_services();
+/**
+ * Tells the admin that the plugin is inactive until Composer dependencies are installed.
+ *
+ * @return void
+ */
+function lh_woo_comgate_missing_vendor_notice() {
+    if (!current_user_can('activate_plugins')) {
+        return;
+    }
+
+    $message = __('LH Woo Comgate is inactive: the vendor directory is missing. Run "composer install" in the plugin directory.', 'lh-woo-comgate');
+    echo '<div class="notice notice-error"><p>' . esc_html($message) . '</p></div>';
 }
