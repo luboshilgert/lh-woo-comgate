@@ -14,6 +14,8 @@ use Comgate\SDK\Entity\PaymentNotification;
 use Comgate\SDK\Entity\Response\PaymentCreateResponse;
 use Comgate\SDK\Entity\Response\PaymentStatusResponse;
 use Comgate\SDK\Exception\ApiException;
+use Automattic\WooCommerce\Caches\OrderCache;
+use Automattic\WooCommerce\Utilities\OrderUtil;
 use WC_Order;
 
 /**
@@ -51,6 +53,13 @@ class ComgateGatewayPayment {
         if (!$order instanceof WC_Order) {
             $this->logger->error('process_payment: order not found for order_id=' . $order_id);
             wc_add_notice(__('Unable to load order for Comgate payment.', 'lh-woo-comgate'), 'error');
+            return ['result' => 'failure'];
+        }
+
+        // is_available() checks the shop currency, but an older order paid again on order-pay keeps its own.
+        if ('CZK' !== $order->get_currency()) {
+            $this->logger->error(sprintf('process_payment: order_id=%d has currency %s, Comgate payments are created in CZK only', $order->get_id(), $order->get_currency()));
+            wc_add_notice(__('This order cannot be paid via Comgate. Please choose another payment method.', 'lh-woo-comgate'), 'error');
             return ['result' => 'failure'];
         }
 
@@ -118,11 +127,8 @@ class ComgateGatewayPayment {
             wp_die(__('Unable to verify Comgate payment status.', 'lh-woo-comgate'));
         }
 
-        if ($order->get_payment_method() === $this->gateway->id) {
-            $this->apply_status_locked($order, $transId, $paymentStatus, 'handle_return');
-        } else {
-            $this->handle_stale_transaction($order, $transId, $paymentStatus, true);
-        }
+        // A failure here is retried by the notification, so the customer still goes to the order page.
+        $this->process_transaction($order, $transId, $paymentStatus, true, 'handle_return');
 
         wp_safe_redirect($this->gateway->get_return_url($order));
         exit;
@@ -176,29 +182,26 @@ class ComgateGatewayPayment {
             exit;
         }
 
+        $owned = true;
         $order = $this->find_order_by_transaction($transId);
         if (!$order) {
+            $owned = false;
             $refId = $paymentStatus->getRefId();
             $order = $this->find_order_by_reference($refId);
 
-            if ($order) {
-                $this->handle_stale_transaction($order, $transId, $paymentStatus, false);
-                status_header(200);
-                echo 'OK';
+            if (!$order) {
+                $this->logger->warning(sprintf('handle_notify: order not found transId=%s refId=%s', $transId, (string) $refId));
+                status_header(404);
+                echo 'Order not found';
                 exit;
             }
-
-            $this->logger->warning(sprintf('handle_notify: order not found transId=%s refId=%s', $transId, (string) $refId));
-            status_header(404);
-            echo 'Order not found';
-            exit;
         }
 
-        // The customer may have paid the order with another gateway after this Comgate attempt.
-        if ($order->get_payment_method() === $this->gateway->id) {
-            $this->apply_status_locked($order, $transId, $paymentStatus, 'handle_notify');
-        } else {
-            $this->handle_stale_transaction($order, $transId, $paymentStatus, true);
+        // Comgate repeats a notification until it gets 200, which retries a lock timeout or a failed completion.
+        if (!$this->process_transaction($order, $transId, $paymentStatus, $owned, 'handle_notify')) {
+            status_header(503);
+            echo 'Temporarily unable to process the notification';
+            exit;
         }
 
         status_header(200);
@@ -207,32 +210,64 @@ class ComgateGatewayPayment {
     }
 
     /**
-     * Runs apply_status() under a per-order database lock on a freshly loaded order.
+     * Applies a verified transaction to its order under a per-order database lock.
      *
-     * @param WC_Order $order Order the transaction is stored on.
+     * @param WC_Order $order Order resolved for the transaction.
      * @param string $transId Comgate transaction identifier.
      * @param PaymentStatusResponse $paymentStatus Status fetched from the Comgate API.
+     * @param bool $owned True when the order was found by its stored transaction, false when only by refId.
      * @param string $context Caller name for log records.
-     * @return void
+     * @return bool False when the caller should let Comgate retry (lock timeout, failed completion).
      */
-    private function apply_status_locked(WC_Order $order, $transId, PaymentStatusResponse $paymentStatus, $context) {
+    private function process_transaction(WC_Order $order, $transId, PaymentStatusResponse $paymentStatus, $owned, $context) {
         global $wpdb;
 
         // Return and notify often arrive together; without the lock both see an unpaid order and complete it twice.
         $lock = 'lh_woo_comgate_order_' . $order->get_id();
-        $locked = 1 === (int) $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 10)', $lock));
+        $result = $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 10)', $lock));
+        $locked = '1' === (string) $result;
+        if ('0' === (string) $result) {
+            $this->logger->warning(sprintf('%s: timed out waiting for the lock on order_id=%d transId=%s', $context, $order->get_id(), $transId));
+            return false;
+        }
         if (!$locked) {
-            $this->logger->warning(sprintf('%s: could not lock order_id=%d, continuing without the lock', $context, $order->get_id()));
+            // NULL: the database does not support named locks, which is no reason to stop taking payments.
+            $this->logger->warning(sprintf('%s: GET_LOCK unavailable for order_id=%d, continuing without the lock', $context, $order->get_id()));
         }
 
         try {
-            $fresh = wc_get_order($order->get_id());
-            $this->apply_status($fresh instanceof WC_Order ? $fresh : $order, $transId, $paymentStatus, $context);
+            $fresh = $this->reload_order($order->get_id());
+            $order = $fresh instanceof WC_Order ? $fresh : $order;
+
+            // The customer may have paid the order with another gateway after this Comgate attempt.
+            if ($owned && $order->get_payment_method() === $this->gateway->id) {
+                return $this->apply_status($order, $transId, $paymentStatus, $context);
+            }
+
+            $this->handle_stale_transaction($order, $transId, $paymentStatus, $owned);
+            return true;
         } finally {
             if ($locked) {
                 $wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock));
             }
         }
+    }
+
+    /**
+     * Loads the order from the database, bypassing the copy cached before the lock was taken.
+     *
+     * @param int $orderId
+     * @return WC_Order|false
+     */
+    private function reload_order($orderId) {
+        // Same caches WooCommerce's order data store clears after a save.
+        clean_post_cache($orderId);
+        wp_cache_delete('order-items-' . $orderId, 'orders');
+        if (class_exists(OrderUtil::class) && OrderUtil::orders_cache_usage_is_enabled()) {
+            wc_get_container()->get(OrderCache::class)->remove($orderId);
+        }
+
+        return wc_get_order($orderId);
     }
 
     /**
@@ -242,7 +277,7 @@ class ComgateGatewayPayment {
      * @param string $transId Comgate transaction identifier.
      * @param PaymentStatusResponse $paymentStatus Status fetched from the Comgate API.
      * @param string $context Caller name for log records.
-     * @return void
+     * @return bool False when completing the payment failed and Comgate should retry.
      */
     private function apply_status(WC_Order $order, $transId, PaymentStatusResponse $paymentStatus, $context) {
         $status = $paymentStatus->getStatus();
@@ -258,7 +293,7 @@ class ComgateGatewayPayment {
                         $transId
                     ));
                 }
-                return;
+                return true;
             }
 
             $mismatch = $this->find_payment_mismatch($order, $paymentStatus);
@@ -272,10 +307,14 @@ class ComgateGatewayPayment {
                         $this->get_mismatch_label($mismatch)
                     ));
                 }
-                return;
+                return true;
             }
 
-            $order->payment_complete($transId);
+            // WooCommerce returns false when a payment hook throws; it already adds an error note to the order.
+            if (!$order->payment_complete($transId)) {
+                $this->logger->error(sprintf('%s: payment_complete failed for order_id=%d transId=%s', $context, $order->get_id(), $transId));
+                return false;
+            }
             $order->add_order_note($paymentStatus->isTest()
                 ? __('Comgate confirmed the test payment.', 'lh-woo-comgate')
                 : __('Comgate confirmed the payment.', 'lh-woo-comgate'));
@@ -283,7 +322,7 @@ class ComgateGatewayPayment {
             // Comgate cancels unpaid payments when they expire, also after the shop moved the order on (paid, on-hold).
             if (!$order->has_status('pending')) {
                 $this->logger->info(sprintf('%s: ignoring cancellation of transId=%s, order_id=%d has status %s', $context, $transId, $order->get_id(), $order->get_status()));
-                return;
+                return true;
             }
             // Failed, not cancelled: only a failed order can be paid again and the thank-you page flags it as unpaid.
             $order->update_status('failed', __('Comgate reported that the payment was cancelled.', 'lh-woo-comgate'));
@@ -294,6 +333,8 @@ class ComgateGatewayPayment {
         } else {
             $this->logger->warning(sprintf('%s: unhandled status=%s transId=%s order_id=%d', $context, $status, $transId, $order->get_id()));
         }
+
+        return true;
     }
 
     /**
