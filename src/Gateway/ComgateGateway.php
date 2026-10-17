@@ -71,6 +71,23 @@ class ComgateGateway extends WC_Payment_Gateway {
     }
 
     /**
+     * Hides the gateway when payments would fail: missing credentials, or a currency other than CZK.
+     *
+     * @return bool
+     */
+    public function is_available() {
+        // Payments are always created in CZK, so any other shop currency would charge a wrong amount.
+        if ('CZK' !== get_woocommerce_currency()) {
+            return false;
+        }
+        if ('' === trim((string) $this->get_option('merchant_id')) || '' === trim((string) $this->get_option('secret'))) {
+            return false;
+        }
+
+        return parent::is_available();
+    }
+
+    /**
      * Processes an order and creates a payment in Comgate.
      *
      * @param int $order_id WooCommerce order identifier.

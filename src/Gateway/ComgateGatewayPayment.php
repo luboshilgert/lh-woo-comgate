@@ -57,8 +57,9 @@ class ComgateGatewayPayment {
         try {
             $response = $this->create_remote_payment($order);
         } catch (\Exception $exception) {
+            // The detail goes only to the masking logger; order notes are not redacted.
             $this->logger->error('process_payment: exception=' . $exception->getMessage());
-            $order->update_status('failed', sprintf(__('Comgate payment failed: %s', 'lh-woo-comgate'), $exception->getMessage()));
+            $order->update_status('failed', __('Comgate payment could not be created. See the lh-woo-comgate log for details.', 'lh-woo-comgate'));
             wc_add_notice(__('There was a problem communicating with Comgate. Please try again.', 'lh-woo-comgate'), 'error');
 
             return ['result' => 'failure'];
@@ -82,6 +83,8 @@ class ComgateGatewayPayment {
         $transactionId = $response->getTransId();
         if ($transactionId !== '') {
             $order->update_meta_data('_lh_woo_comgate_trans_id', $transactionId);
+            // The mode the payment was created in, so switching the setting later does not hold pending payments.
+            $order->update_meta_data('_lh_woo_comgate_test', 'yes' === $this->gateway->get_option('test_mode') ? 'yes' : 'no');
         }
 
         $order->save();
@@ -98,8 +101,8 @@ class ComgateGatewayPayment {
      * @return void
      */
     public function handle_return() {
-        $transId = isset($_GET['transId']) ? sanitize_text_field(wp_unslash($_GET['transId'])) : null;
-        if (!$transId) {
+        $transId = isset($_GET['transId']) ? $this->normalize_trans_id(wp_unslash($_GET['transId'])) : null;
+        if ($transId === null) {
             wp_die(__('Missing Comgate transaction identifier.', 'lh-woo-comgate'));
         }
         $order = $this->find_order_by_transaction($transId);
@@ -109,20 +112,16 @@ class ComgateGatewayPayment {
         }
 
         try {
-            $status = $this->get_payment_status($transId)->getStatus();
-        } catch (ApiException $exception) {
+            $paymentStatus = $this->get_payment_status($transId);
+        } catch (\Throwable $exception) {
             $this->logger->error('handle_return: status error=' . $exception->getMessage());
             wp_die(__('Unable to verify Comgate payment status.', 'lh-woo-comgate'));
         }
 
-        if (in_array($status, [PaymentStatusCode::PAID, PaymentStatusCode::AUTHORIZED], true)) {
-            $order->payment_complete($transId);
-            $order->add_order_note(__('Comgate confirmed the payment.', 'lh-woo-comgate'));
-        } elseif ($status === PaymentStatusCode::CANCELLED) {
-            // Failed, not cancelled: only a failed order can be paid again and the thank-you page flags it as unpaid.
-            $order->update_status('failed', __('Comgate reported that the payment was cancelled.', 'lh-woo-comgate'));
-        } elseif ($status === PaymentStatusCode::PENDING) {
-            $order->add_order_note(__('Comgate reported that the payment is pending.', 'lh-woo-comgate'));
+        if ($order->get_payment_method() === $this->gateway->id) {
+            $this->apply_status_locked($order, $transId, $paymentStatus, 'handle_return');
+        } else {
+            $this->handle_stale_transaction($order, $transId, $paymentStatus, true);
         }
 
         wp_safe_redirect($this->gateway->get_return_url($order));
@@ -153,9 +152,9 @@ class ComgateGatewayPayment {
             exit;
         }
 
-        $transId = $notification->getTransactionId();
-        if (!is_string($transId) || $transId === '') {
-            $this->logger->warning('handle_notify: notification without a transaction identifier');
+        $transId = $this->normalize_trans_id($notification->getTransactionId());
+        if ($transId === null) {
+            $this->logger->warning('handle_notify: notification without a valid transaction identifier');
             status_header(400);
             echo 'Notification does not include a valid transaction identifier';
             exit;
@@ -168,11 +167,14 @@ class ComgateGatewayPayment {
             $httpStatus = (is_int($code) && $code >= 500 && $code < 600) ? 502 : 400;
             $this->logger->warning(sprintf('handle_notify: status check failed transId=%s code=%s message=%s', $transId, (string) $code, $exception->getMessage()));
             status_header($httpStatus);
-            echo $exception->getMessage();
+            echo 'Unable to verify payment status';
+            exit;
+        } catch (\Throwable $exception) {
+            $this->logger->error(sprintf('handle_notify: status check failed transId=%s error=%s', $transId, $exception->getMessage()));
+            status_header(500);
+            echo 'Unable to verify payment status';
             exit;
         }
-
-        $status = $paymentStatus->getStatus();
 
         $order = $this->find_order_by_transaction($transId);
         if (!$order) {
@@ -180,12 +182,7 @@ class ComgateGatewayPayment {
             $order = $this->find_order_by_reference($refId);
 
             if ($order) {
-                $this->logger->info(sprintf(
-                    'handle_notify: ignoring stale transaction transId=%s for order_id=%d resolved via refId=%s',
-                    $transId,
-                    $order->get_id(),
-                    (string) $refId
-                ));
+                $this->handle_stale_transaction($order, $transId, $paymentStatus, false);
                 status_header(200);
                 echo 'OK';
                 exit;
@@ -197,19 +194,238 @@ class ComgateGatewayPayment {
             exit;
         }
 
-        if (in_array($status, [PaymentStatusCode::PAID, PaymentStatusCode::AUTHORIZED], true)) {
-            $order->payment_complete($transId);
-            $order->add_order_note(__('Comgate confirmed the payment.', 'lh-woo-comgate'));
-        } elseif ($status === PaymentStatusCode::CANCELLED) {
-            // Failed, not cancelled: only a failed order can be paid again and the thank-you page flags it as unpaid.
-            $order->update_status('failed', __('Comgate reported that the payment was cancelled.', 'lh-woo-comgate'));
-        } elseif ($status === PaymentStatusCode::PENDING) {
-            $order->add_order_note(__('Comgate reported that the payment is pending.', 'lh-woo-comgate'));
+        // The customer may have paid the order with another gateway after this Comgate attempt.
+        if ($order->get_payment_method() === $this->gateway->id) {
+            $this->apply_status_locked($order, $transId, $paymentStatus, 'handle_notify');
+        } else {
+            $this->handle_stale_transaction($order, $transId, $paymentStatus, true);
         }
 
         status_header(200);
         echo 'OK';
         exit;
+    }
+
+    /**
+     * Runs apply_status() under a per-order database lock on a freshly loaded order.
+     *
+     * @param WC_Order $order Order the transaction is stored on.
+     * @param string $transId Comgate transaction identifier.
+     * @param PaymentStatusResponse $paymentStatus Status fetched from the Comgate API.
+     * @param string $context Caller name for log records.
+     * @return void
+     */
+    private function apply_status_locked(WC_Order $order, $transId, PaymentStatusResponse $paymentStatus, $context) {
+        global $wpdb;
+
+        // Return and notify often arrive together; without the lock both see an unpaid order and complete it twice.
+        $lock = 'lh_woo_comgate_order_' . $order->get_id();
+        $locked = 1 === (int) $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 10)', $lock));
+        if (!$locked) {
+            $this->logger->warning(sprintf('%s: could not lock order_id=%d, continuing without the lock', $context, $order->get_id()));
+        }
+
+        try {
+            $fresh = wc_get_order($order->get_id());
+            $this->apply_status($fresh instanceof WC_Order ? $fresh : $order, $transId, $paymentStatus, $context);
+        } finally {
+            if ($locked) {
+                $wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock));
+            }
+        }
+    }
+
+    /**
+     * Moves the order to the state of a verified Comgate transaction.
+     *
+     * @param WC_Order $order Order the transaction is stored on.
+     * @param string $transId Comgate transaction identifier.
+     * @param PaymentStatusResponse $paymentStatus Status fetched from the Comgate API.
+     * @param string $context Caller name for log records.
+     * @return void
+     */
+    private function apply_status(WC_Order $order, $transId, PaymentStatusResponse $paymentStatus, $context) {
+        $status = $paymentStatus->getStatus();
+
+        if (in_array($status, [PaymentStatusCode::PAID, PaymentStatusCode::AUTHORIZED], true)) {
+            if ($order->is_paid()) {
+                // The same transaction confirmed by both return and notify is fine; a different one means a second payment.
+                if ($order->get_transaction_id() !== $transId) {
+                    $this->logger->warning(sprintf('%s: transId=%s was paid for already paid order_id=%d', $context, $transId, $order->get_id()));
+                    $this->add_flag_note($order, $transId, sprintf(
+                        /* translators: %s: Comgate transaction ID */
+                        __('Comgate confirmed transaction %s although the order is already paid. The customer may have paid twice - check the Comgate portal and refund one payment.', 'lh-woo-comgate'),
+                        $transId
+                    ));
+                }
+                return;
+            }
+
+            $mismatch = $this->find_payment_mismatch($order, $paymentStatus);
+            if ($mismatch !== null) {
+                $this->logger->warning(sprintf('%s: transaction does not match order_id=%d transId=%s mismatch=%s', $context, $order->get_id(), $transId, $mismatch));
+                if (!$order->has_status('on-hold')) {
+                    $order->update_status('on-hold', sprintf(
+                        /* translators: 1: Comgate transaction ID, 2: what does not match, e.g. "amount" */
+                        __('Comgate confirmed transaction %1$s, but it does not match the order (%2$s). Check the payment in the Comgate portal before fulfilling the order.', 'lh-woo-comgate'),
+                        $transId,
+                        $this->get_mismatch_label($mismatch)
+                    ));
+                }
+                return;
+            }
+
+            $order->payment_complete($transId);
+            $order->add_order_note($paymentStatus->isTest()
+                ? __('Comgate confirmed the test payment.', 'lh-woo-comgate')
+                : __('Comgate confirmed the payment.', 'lh-woo-comgate'));
+        } elseif ($status === PaymentStatusCode::CANCELLED) {
+            // Comgate cancels unpaid payments when they expire, also after the shop moved the order on (paid, on-hold).
+            if (!$order->has_status('pending')) {
+                $this->logger->info(sprintf('%s: ignoring cancellation of transId=%s, order_id=%d has status %s', $context, $transId, $order->get_id(), $order->get_status()));
+                return;
+            }
+            // Failed, not cancelled: only a failed order can be paid again and the thank-you page flags it as unpaid.
+            $order->update_status('failed', __('Comgate reported that the payment was cancelled.', 'lh-woo-comgate'));
+        } elseif ($status === PaymentStatusCode::PENDING) {
+            if (!$order->is_paid()) {
+                $order->add_order_note(__('Comgate reported that the payment is pending.', 'lh-woo-comgate'));
+            }
+        } else {
+            $this->logger->warning(sprintf('%s: unhandled status=%s transId=%s order_id=%d', $context, $status, $transId, $order->get_id()));
+        }
+    }
+
+    /**
+     * Flags a payment confirmed on a transaction the order no longer uses.
+     *
+     * @param WC_Order $order The order the transaction was created for.
+     * @param string $transId The older Comgate transaction identifier.
+     * @param PaymentStatusResponse $paymentStatus Status fetched from the Comgate API.
+     * @param bool $owned True when the order was found by its stored transaction, false when only by refId.
+     * @return void
+     */
+    private function handle_stale_transaction(WC_Order $order, $transId, PaymentStatusResponse $paymentStatus, $owned) {
+        $this->logger->info(sprintf(
+            'stale transaction transId=%s for order_id=%d refId=%s status=%s payment_method=%s',
+            $transId,
+            $order->get_id(),
+            $paymentStatus->getRefId(),
+            $paymentStatus->getStatus(),
+            $order->get_payment_method()
+        ));
+
+        if (!in_array($paymentStatus->getStatus(), [PaymentStatusCode::PAID, PaymentStatusCode::AUTHORIZED], true)) {
+            return;
+        }
+
+        // refId is only the order number, so another shop on the same merchant account can collide with it.
+        if (!$owned && $order->get_payment_method() !== $this->gateway->id) {
+            return;
+        }
+        if ($this->find_payment_mismatch($order, $paymentStatus) !== null) {
+            return;
+        }
+
+        $this->logger->warning(sprintf('older transaction transId=%s was paid for order_id=%d', $transId, $order->get_id()));
+        $this->add_flag_note($order, $transId, sprintf(
+            $order->is_paid()
+                /* translators: %s: Comgate transaction ID */
+                ? __('Comgate confirmed an older transaction %s although the order is already paid. The customer may have paid twice - check the Comgate portal and refund one payment.', 'lh-woo-comgate')
+                /* translators: %s: Comgate transaction ID */
+                : __('Comgate confirmed an older transaction %s that the order no longer uses. Check the payment in the Comgate portal and update the order manually.', 'lh-woo-comgate'),
+            $transId
+        ));
+    }
+
+    /**
+     * Adds an order note once per transaction, since Comgate may deliver a notification repeatedly.
+     *
+     * @param WC_Order $order
+     * @param string $transId
+     * @param string $note
+     * @return void
+     */
+    private function add_flag_note(WC_Order $order, $transId, $note) {
+        $flagged = (array) $order->get_meta('_lh_woo_comgate_flagged');
+        if (in_array($transId, $flagged, true)) {
+            return;
+        }
+
+        $flagged[] = $transId;
+        $order->update_meta_data('_lh_woo_comgate_flagged', $flagged);
+        $order->save();
+        $order->add_order_note($note);
+    }
+
+    /**
+     * Compares a verified transaction with the order it is applied to.
+     *
+     * @param WC_Order $order WooCommerce order.
+     * @param PaymentStatusResponse $paymentStatus Status fetched from the Comgate API.
+     * @return string|null Mismatch code (reference, currency, amount, test), or null when the transaction fits the order.
+     */
+    private function find_payment_mismatch(WC_Order $order, PaymentStatusResponse $paymentStatus) {
+        if ((string) $paymentStatus->getRefId() !== (string) $order->get_id()) {
+            return 'reference';
+        }
+        if (strtoupper($paymentStatus->getCurrency()) !== strtoupper($order->get_currency())) {
+            return 'currency';
+        }
+        if ($paymentStatus->getPrice()->get() !== $this->to_cents($order->get_total())) {
+            return 'amount';
+        }
+
+        // Orders created before the mode was stored fall back to the current setting.
+        $storedTest = $order->get_meta('_lh_woo_comgate_test');
+        $expectTest = '' !== $storedTest ? 'yes' === $storedTest : 'yes' === $this->gateway->get_option('test_mode');
+        // A test payment costs the payer nothing, so it must not complete a live order.
+        if ($paymentStatus->isTest() && !$expectTest) {
+            return 'test';
+        }
+
+        return null;
+    }
+
+    /**
+     * @param string $mismatch Code returned by find_payment_mismatch().
+     * @return string
+     */
+    private function get_mismatch_label($mismatch) {
+        $labels = [
+            'reference' => __('order number', 'lh-woo-comgate'),
+            'currency' => __('currency', 'lh-woo-comgate'),
+            'amount' => __('amount', 'lh-woo-comgate'),
+            'test' => __('test payment on a live order', 'lh-woo-comgate'),
+        ];
+
+        return isset($labels[$mismatch]) ? $labels[$mismatch] : $mismatch;
+    }
+
+    /**
+     * Converts a WooCommerce decimal amount to minor units.
+     *
+     * @param string|float $amount
+     * @return int
+     */
+    private function to_cents($amount) {
+        return (int) round((float) $amount * 100);
+    }
+
+    /**
+     * Returns the transaction ID when it has the Comgate format, null otherwise.
+     *
+     * @param mixed $transId
+     * @return string|null
+     */
+    private function normalize_trans_id($transId) {
+        if (!is_string($transId)) {
+            return null;
+        }
+        $transId = trim($transId);
+
+        // Rejects line breaks and markup before the value reaches the log or the API.
+        return preg_match('/^[A-Za-z0-9-]{1,64}$/', $transId) === 1 ? $transId : null;
     }
 
     /**
@@ -263,7 +479,7 @@ class ComgateGatewayPayment {
         $billingName = trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name());
 
         $payment
-            ->setPrice(Money::ofInt($order->get_total()))
+            ->setPrice(Money::ofCents($this->to_cents($order->get_total())))
             ->setCurrency(CurrencyCode::CZK)
             ->setParam('enableApplePayGooglePay', true)
             ->setLabel(sprintf(__('Objednávka %s', 'lh-woo-comgate'), $order->get_order_number()))

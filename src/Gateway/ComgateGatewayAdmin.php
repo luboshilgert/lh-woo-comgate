@@ -57,7 +57,7 @@ class ComgateGatewayAdmin {
                 'title' => __('Test mode', 'lh-woo-comgate'),
                 'type' => 'checkbox',
                 'label' => __('Send payments to the Comgate sandbox.', 'lh-woo-comgate'),
-                'default' => 'yes',
+                'default' => 'no',
             ],
             'language' => [
                 'title' => __('Language', 'lh-woo-comgate'),
