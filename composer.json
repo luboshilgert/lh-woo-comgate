@@ -11,14 +11,8 @@
     ],
     "minimum-stability": "stable",
     "prefer-stable": true,
-    "repositories": {
-        "comgate-sdk": {
-            "type": "vcs",
-            "url": "https://github.com/comgate-payments/sdk-php"
-        }
-    },
     "require": {
-        "comgate/sdk": "dev-master",
+        "comgate/sdk": "~1.8.0",
         "yahnis-elsts/plugin-update-checker": "^5.7"
     },
     "autoload": {

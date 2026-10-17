@@ -4,11 +4,11 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "045d107678d541a51067fe2e2f1bd6ec",
+    "content-hash": "e92542a522a7fdc09992659b6f9737b1",
     "packages": [
         {
             "name": "comgate/sdk",
-            "version": "dev-master",
+            "version": "v1.8.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/comgate-payments/sdk-php.git",
@@ -42,7 +42,6 @@
                 "squizlabs/php_codesniffer": "^3.7",
                 "vlucas/phpdotenv": "^5.5"
             },
-            "default-branch": true,
             "type": "library",
             "extra": {
                 "branch-alias": {
@@ -54,11 +53,7 @@
                     "Comgate\\SDK\\": "src/"
                 }
             },
-            "autoload-dev": {
-                "psr-4": {
-                    "Tests\\": "tests/"
-                }
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "MIT"
             ],
@@ -78,8 +73,8 @@
                 "php"
             ],
             "support": {
-                "source": "https://github.com/comgate-payments/sdk-php/tree/master",
-                "issues": "https://github.com/comgate-payments/sdk-php/issues"
+                "issues": "https://github.com/comgate-payments/sdk-php/issues",
+                "source": "https://github.com/comgate-payments/sdk-php/tree/v1.8.0"
             },
             "time": "2026-01-08T07:22:41+00:00"
         },
@@ -469,9 +464,7 @@
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "comgate/sdk": 20
-    },
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {},

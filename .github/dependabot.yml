@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # composer.lock is what the release ZIP ships, so outdated or vulnerable packages reach every shop.
+  - package-ecosystem: composer
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+
+  # Keeps the commit-pinned actions in release.yml moving.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

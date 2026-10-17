@@ -27,7 +27,7 @@ jobs:
 
       - name: Install dependencies
         env:
-          # The Comgate SDK comes from a GitHub vcs repository, which hits the anonymous API rate limit.
+          # Package archives download from api.github.com, which rate-limits anonymous requests.
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
         run: composer install --no-dev --optimize-autoloader --no-interaction --no-progress
 

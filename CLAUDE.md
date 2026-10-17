@@ -8,7 +8,7 @@ A WooCommerce payment gateway plugin (`LH Woo Comgate`) that adds Comgate card p
 
 ## Commands
 
-- `composer install` - download the Comgate SDK into `vendor/` (gitignored). The SDK is pulled from GitHub via a `vcs` repository in `composer.json` (package `comgate/sdk`, `dev-master`), **not** Packagist. If the GitHub API rate limit is hit, supply a personal access token to Composer (see `readme.md`).
+- `composer install` - download dependencies into `vendor/` (gitignored): the Comgate SDK (`comgate/sdk` from Packagist, pinned to `~1.8.0`) and Plugin Update Checker. If the GitHub API rate limit is hit, supply a personal access token to Composer (see `readme.md`).
 - `composer dump-autoload` - regenerate the PSR-4 autoloader after adding classes under `src/`.
 
 There is no build step, linter config, or test suite in this repo.
@@ -20,9 +20,9 @@ The repository is public on GitHub (`origin`); sites get the plugin as plain cod
 1. Bump `Version:` in the `lh-woo-comgate.php` header.
 2. Commit to `main` and push.
 3. Tag with a `v` prefix (e.g. `v1.1.0`) and push the tag.
-4. `.github/workflows/release.yml` runs `composer install --no-dev` (with the workflow token, because the SDK is a GitHub `vcs` repository), builds `lh-woo-comgate.zip` with the plugin folder as its root and `vendor/` inside, checks the header version against the tag and attaches the ZIP to the release.
+4. `.github/workflows/release.yml` runs `composer install --no-dev` (with the workflow token against the GitHub download rate limit), builds `lh-woo-comgate.zip` with the plugin folder as its root and `vendor/` inside, checks the header version against the tag and attaches the ZIP to the release.
 
-Plugin Update Checker compares the header version inside the ZIP, so tag and header must match or no update is offered. Run `composer audit` before tagging: the ZIP ships whatever `composer.lock` pins.
+Plugin Update Checker compares the header version inside the ZIP, so tag and header must match or no update is offered. Run `composer audit` before tagging: the ZIP ships whatever `composer.lock` pins. Dependabot (`.github/dependabot.yml`) opens monthly PRs for Composer packages and the commit-pinned workflow actions. SDK minor upgrades change payment creation and status parsing, so merge them only after a real test payment.
 
 ## Architecture
 
