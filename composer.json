@@ -12,7 +12,7 @@
     "minimum-stability": "stable",
     "prefer-stable": true,
     "require": {
-        "comgate/sdk": "~1.8.0",
+        "comgate/sdk": "~1.9.2",
         "yahnis-elsts/plugin-update-checker": "^5.7"
     },
     "autoload": {
