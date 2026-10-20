@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e92542a522a7fdc09992659b6f9737b1",
+    "content-hash": "8819bb308088f248dfbfb8f4d574671b",
     "packages": [
         {
             "name": "comgate/sdk",
-            "version": "v1.8.0",
+            "version": "v1.9.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/comgate-payments/sdk-php.git",
-                "reference": "c5eaa4d5f4e32886be2dade5d4249069051af938"
+                "reference": "d478321729081928782cc00c14a794cbfdded8e4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/comgate-payments/sdk-php/zipball/c5eaa4d5f4e32886be2dade5d4249069051af938",
-                "reference": "c5eaa4d5f4e32886be2dade5d4249069051af938",
+                "url": "https://api.github.com/repos/comgate-payments/sdk-php/zipball/d478321729081928782cc00c14a794cbfdded8e4",
+                "reference": "d478321729081928782cc00c14a794cbfdded8e4",
                 "shasum": ""
             },
             "require": {
@@ -74,9 +74,9 @@
             ],
             "support": {
                 "issues": "https://github.com/comgate-payments/sdk-php/issues",
-                "source": "https://github.com/comgate-payments/sdk-php/tree/v1.8.0"
+                "source": "https://github.com/comgate-payments/sdk-php/tree/v1.9.2"
             },
-            "time": "2026-01-08T07:22:41+00:00"
+            "time": "2026-04-17T10:04:07+00:00"
         },
         {
             "name": "paragonie/constant_time_encoding",
